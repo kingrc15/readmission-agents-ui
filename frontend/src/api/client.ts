@@ -6,11 +6,47 @@ import type {
   DefaultPromptResponse,
 } from "./types";
 
-/** In dev, default to same-origin so Vite proxies /api to the backend. */
-export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL?.trim() ||
-  (import.meta.env.DEV ? "" : "http://localhost:8001")
-).replace(/\/$/, "");
+const READMIT_API_BASE_LS = "readmit_api_base_url";
+
+/** Value baked in at `vite build` (from VITE_API_BASE_URL) plus non-dev fallback. */
+export function getBakedApiBaseUrl(): string {
+  return (
+    import.meta.env.VITE_API_BASE_URL?.trim() ||
+    (import.meta.env.DEV ? "" : "http://localhost:8001")
+  ).replace(/\/$/, "");
+}
+
+/** localStorage wins so GitHub Pages can override a bad or missing build-time URL without redeploying. */
+export function getApiBaseUrl(): string {
+  try {
+    const ls = localStorage.getItem(READMIT_API_BASE_LS)?.trim();
+    if (ls) return ls.replace(/\/$/, "");
+  } catch {
+    /* private mode */
+  }
+  return getBakedApiBaseUrl();
+}
+
+export function setApiBaseUrl(url: string | null): void {
+  try {
+    if (url?.trim()) {
+      localStorage.setItem(READMIT_API_BASE_LS, url.trim().replace(/\/$/, ""));
+    } else {
+      localStorage.removeItem(READMIT_API_BASE_LS);
+    }
+  } catch {
+    /* */
+  }
+  window.dispatchEvent(new CustomEvent("readmit-api-base-changed"));
+}
+
+export function hasLocalApiBaseOverride(): boolean {
+  try {
+    return Boolean(localStorage.getItem(READMIT_API_BASE_LS)?.trim());
+  } catch {
+    return false;
+  }
+}
 
 const READMIT_TOKEN_STORAGE_KEY = "readmit_api_token";
 
@@ -24,7 +60,6 @@ function readSessionToken(): string {
   }
 }
 
-/** Session token overrides VITE_READMIT_API_TOKEN so users can paste without rebuilding. */
 export function getReadmitApiToken(): string {
   const s = readSessionToken();
   if (s) return s;
@@ -43,7 +78,7 @@ export function setReadmitApiToken(token: string | null): void {
       sessionStorage.removeItem(READMIT_TOKEN_STORAGE_KEY);
     }
   } catch {
-    /* private / blocked storage */
+    /* */
   }
   window.dispatchEvent(new CustomEvent("readmit-api-token-changed"));
 }
@@ -81,21 +116,19 @@ function formatRequestError(path: string, status: number, body: string): string 
 
 function networkErrorMessage(cause: unknown): string {
   const raw = cause instanceof Error ? cause.message : String(cause);
+  const base = getApiBaseUrl();
   const isHttpsPage =
     typeof globalThis.location !== "undefined" && globalThis.location.protocol === "https:";
-  const isHttpApi = API_BASE.startsWith("http:");
+  const isHttpApi = base.startsWith("http:");
 
-  const parts: string[] = [
-    `Failed to fetch API (${API_BASE || "same-origin / relative"}).`,
-    `Cause: ${raw}`,
-  ];
+  const parts: string[] = [`Failed to fetch API (${base || "same-origin / relative"}).`, `Cause: ${raw}`];
 
   if (
     !import.meta.env.DEV &&
-    (API_BASE === "" || API_BASE.includes("127.0.0.1") || API_BASE.includes("localhost"))
+    (base === "" || base.includes("127.0.0.1") || base.includes("localhost"))
   ) {
     parts.push(
-      "This build still points at localhost. For GitHub Pages, set repository variable VITE_API_BASE_URL to your public FastAPI base URL (no trailing slash), then rerun the workflow.",
+      "Open “Connection” in the header and set your public HTTPS API URL, or fix VITE_API_BASE_URL in GitHub Actions and redeploy.",
     );
   }
 
@@ -106,20 +139,22 @@ function networkErrorMessage(cause: unknown): string {
   }
 
   parts.push(
-    "Confirm the backend is reachable from the internet and CORS_ORIGINS includes your Pages origin.",
+    "Confirm the backend is reachable and CORS allows this Pages origin. Use the Connection dialog to set your ngrok URL.",
   );
 
   return parts.join(" ");
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  const base = getApiBaseUrl();
+  const url = `${base}${path}`;
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
         ...authHeaders(),
         ...init?.headers,
       },
@@ -152,7 +187,6 @@ export function listAdmissions(params: {
   return request(`/api/admissions${qs ? `?${qs}` : ""}`);
 }
 
-/** Fetch every admission row (paginated) for the dropdown. */
 export async function listAllAdmissions(): Promise<AdmissionListResponse> {
   const first = await listAdmissions({ offset: 0, limit: PAGE_SIZE });
   const all = [...first.items];
@@ -179,8 +213,4 @@ export function runChat(body: ChatRequest): Promise<ChatResponse> {
     method: "POST",
     body: JSON.stringify(body),
   });
-}
-
-export function getApiBaseUrl(): string {
-  return API_BASE;
 }

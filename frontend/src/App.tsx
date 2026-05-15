@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  API_BASE,
   getAdmission,
   getApiBaseUrl,
   getDefaultPrompt,
@@ -16,9 +15,9 @@ import type {
   NoteViewMode,
 } from "./api/types";
 import { AdmissionSelector } from "./components/AdmissionSelector";
+import { ConnectionModal } from "./components/ConnectionModal";
 import { NoteViewer } from "./components/NoteViewer";
 import { PromptPanel } from "./components/PromptPanel";
-import { TokenPromptModal } from "./components/TokenPromptModal";
 import { buildDefaultUserPromptTemplate } from "./buildDefaultUserPrompt";
 
 export default function App() {
@@ -34,8 +33,10 @@ export default function App() {
   const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tokenModalOpen, setTokenModalOpen] = useState(false);
-  const [tokenModalMessage, setTokenModalMessage] = useState<string | null>(null);
+  const [connModalOpen, setConnModalOpen] = useState(false);
+  const [connModalMessage, setConnModalMessage] = useState<string | null>(null);
+  /** Bumps when API base or token changes in storage so header re-reads getApiBaseUrl(). */
+  const [connRev, setConnRev] = useState(0);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -58,27 +59,41 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const bump = () => setConnRev((n) => n + 1);
+    window.addEventListener("readmit-api-base-changed", bump);
+    window.addEventListener("readmit-api-token-changed", bump);
+    return () => {
+      window.removeEventListener("readmit-api-base-changed", bump);
+      window.removeEventListener("readmit-api-token-changed", bump);
+    };
+  }, []);
+
+  useEffect(() => {
     setUnauthorizedHandler(() => {
-      setTokenModalMessage(
-        "The server rejected the API token (wrong or missing). Enter the token from READMIT_API_TOKEN.",
+      setConnModalMessage(
+        "The server rejected the API token (wrong or missing). Set the token below if required.",
       );
-      setTokenModalOpen(true);
+      setConnModalOpen(true);
     });
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  /** If nothing is configured yet, ask before failing the main list request. */
+  /** If no token in session/env, probe unauthenticated; 401 means token required. */
   useEffect(() => {
     if (getReadmitApiToken().trim()) return;
     let cancelled = false;
     void (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/admissions?limit=1`, {
-          headers: { "Content-Type": "application/json" },
+        const base = getApiBaseUrl();
+        const r = await fetch(`${base}/api/admissions?limit=1`, {
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
         });
         if (cancelled || r.status !== 401) return;
-        setTokenModalMessage("This server requires an API token.");
-        setTokenModalOpen(true);
+        setConnModalMessage("This server requires an API token.");
+        setConnModalOpen(true);
       } catch {
         /* network — main list will show error */
       }
@@ -86,7 +101,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [connRev]);
 
   useEffect(() => {
     void loadList();
@@ -134,14 +149,18 @@ export default function App() {
     }
   };
 
+  const apiLine = getApiBaseUrl();
+  const showLocalhostBanner =
+    import.meta.env.PROD && (apiLine.includes("localhost") || apiLine.includes("127.0.0.1"));
+
   return (
     <>
-      <TokenPromptModal
-        open={tokenModalOpen}
-        message={tokenModalMessage}
+      <ConnectionModal
+        open={connModalOpen}
+        message={connModalMessage}
         onClose={() => {
-          setTokenModalOpen(false);
-          setTokenModalMessage(null);
+          setConnModalOpen(false);
+          setConnModalMessage(null);
         }}
         onSaved={() => {
           void loadList();
@@ -154,7 +173,7 @@ export default function App() {
           <div>
             <h1>Readmit LLM — Clinician Review</h1>
             <p>
-              API: {getApiBaseUrl()}
+              API: {apiLine || "(same-origin)"}
               {admission && (
                 <>
                   {" "}
@@ -169,13 +188,22 @@ export default function App() {
             type="button"
             className="button-header"
             onClick={() => {
-              setTokenModalMessage("Paste the same value as READMIT_API_TOKEN on the server.");
-              setTokenModalOpen(true);
+              setConnModalMessage(
+                "Set your FastAPI base URL (e.g. ngrok https URL) and optional READMIT_API_TOKEN.",
+              );
+              setConnModalOpen(true);
             }}
           >
-            API token…
+            Connection…
           </button>
         </div>
+        {showLocalhostBanner ? (
+          <p className="app-banner">
+            This build still defaults to localhost. Click <strong>Connection…</strong> and enter your
+            public API URL (HTTPS), or set{" "}
+            <code className="inline-code">VITE_API_BASE_URL</code> in GitHub Actions and redeploy.
+          </p>
+        ) : null}
       </header>
 
       <AdmissionSelector
