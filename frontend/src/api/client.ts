@@ -8,7 +8,8 @@ import type {
 
 /** In dev, default to same-origin so Vite proxies /api to the backend. */
 export const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "" : "http://localhost:8001")
+  import.meta.env.VITE_API_BASE_URL?.trim() ||
+  (import.meta.env.DEV ? "" : "http://localhost:8001")
 ).replace(/\/$/, "");
 
 const READMIT_TOKEN_STORAGE_KEY = "readmit_api_token";
@@ -78,15 +79,54 @@ function formatRequestError(path: string, status: number, body: string): string 
   return body || `Request failed: ${status}`;
 }
 
+function networkErrorMessage(cause: unknown): string {
+  const raw = cause instanceof Error ? cause.message : String(cause);
+  const isHttpsPage =
+    typeof globalThis.location !== "undefined" && globalThis.location.protocol === "https:";
+  const isHttpApi = API_BASE.startsWith("http:");
+
+  const parts: string[] = [
+    `Failed to fetch API (${API_BASE || "same-origin / relative"}).`,
+    `Cause: ${raw}`,
+  ];
+
+  if (
+    !import.meta.env.DEV &&
+    (API_BASE === "" || API_BASE.includes("127.0.0.1") || API_BASE.includes("localhost"))
+  ) {
+    parts.push(
+      "This build still points at localhost. For GitHub Pages, set repository variable VITE_API_BASE_URL to your public FastAPI base URL (no trailing slash), then rerun the workflow.",
+    );
+  }
+
+  if (isHttpsPage && isHttpApi) {
+    parts.push(
+      "HTTPS page + http:// API is blocked (mixed content). Serve the API over HTTPS (tunnel or reverse proxy).",
+    );
+  }
+
+  parts.push(
+    "Confirm the backend is reachable from the internet and CORS_ORIGINS includes your Pages origin.",
+  );
+
+  return parts.join(" ");
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...init?.headers,
-    },
-  });
+  const url = `${API_BASE}${path}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...init?.headers,
+      },
+    });
+  } catch (e) {
+    throw new Error(networkErrorMessage(e));
+  }
   if (!res.ok) {
     const text = await res.text();
     if (res.status === 401) {

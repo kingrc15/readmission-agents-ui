@@ -111,9 +111,9 @@ Restart `./scripts/start-backend.sh` after changing `.env`.
 1. Push this repo to GitHub.
 2. Enable **Pages** → Source: **GitHub Actions**.
 3. On push to `main`, `.github/workflows/deploy-pages.yml` builds and deploys `frontend/dist`.
-4. Set repository variable or secret **`VITE_API_BASE_URL`** to your UI backend URL (e.g. `http://YOUR_LAN_IP:8001`). If unset, the build uses `http://localhost:8001`.
+4. Set **`VITE_API_BASE_URL`** in one of these places (either works after the workflow update): **Settings → Secrets and variables → Actions → *Variables*** at the **repository** level, **or** under **Settings → Environments → `github-pages` → Environment variables** (the build job uses that environment so the value is visible during `npm run build`). Value = public **HTTPS** FastAPI root, **no trailing slash** (e.g. `https://your-tunnel.ngrok-free.dev`). If this is missing at build time, the UI falls back to `http://localhost:8001` in the bundle. **Re-run the workflow** after changing it.
 5. If you use **`READMIT_API_TOKEN`** on the API, add repository secret **`VITE_READMIT_API_TOKEN`** with the **same** value so the static site can authorize requests.
-6. Add your Pages origin to backend `CORS_ORIGINS`, e.g. `https://YOUR_USER.github.io`.
+6. On the machine running FastAPI, set **`CORS_ORIGINS`** to include your Pages origin, e.g. `https://YOUR_USER.github.io` (no path — the `Origin` header is scheme + host only).
 
 The Vite `base` path is derived from `GITHUB_REPOSITORY` so assets load under `https://user.github.io/repo-name/`.
 

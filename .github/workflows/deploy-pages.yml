@@ -17,6 +17,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # So Variables/Secrets attached to the "github-pages" environment are visible here.
+    # If your VITE_API_BASE_URL is only under Environments → github-pages, this is required.
+    # You can instead define it under repo Settings → Secrets and variables → Actions → Variables (no environment).
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -29,10 +33,14 @@ jobs:
       - name: Install and build frontend
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || secrets.VITE_API_BASE_URL || 'http://localhost:8001' }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || secrets.VITE_API_BASE_URL }}
           VITE_READMIT_API_TOKEN: ${{ secrets.VITE_READMIT_API_TOKEN || '' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
+          if [ -z "${VITE_API_BASE_URL:-}" ]; then
+            echo "::error::VITE_API_BASE_URL was empty at build time. Add it as a **repository** Variable (Settings → Secrets and variables → Actions → Variables) OR under **Environment** github-pages (this workflow uses environment: github-pages on the build job). Use your public FastAPI root, e.g. https://your-tunnel.ngrok-free.dev — no trailing slash."
+            exit 1
+          fi
           npm ci
           npm run build
 
