@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     vllm_model: str = "local-model"
     vllm_api_key: str = "EMPTY"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Allow any https://<user>.github.io origin (GitHub Pages). Disable if you must lock CORS to cors_origins only.
+    cors_allow_github_io_regex: bool = True
     request_timeout_s: float = 600.0
     default_temperature: float = 0.2
 
@@ -86,6 +88,13 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        if not self.cors_allow_github_io_regex:
+            return None
+        # User/org Pages: Origin is https://<login>.github.io (no path).
+        return r"https://[a-zA-Z0-9-]+\.github\.io"
 
     def resolved_cohort_parquet_path(self) -> Path:
         """Use configured path, or repo data/ fallback if placeholder path is missing."""
