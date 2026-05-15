@@ -117,7 +117,28 @@ Restart `./scripts/start-backend.sh` after changing `.env`.
 
 The Vite `base` path is derived from `GITHUB_REPOSITORY` so assets load under `https://user.github.io/repo-name/`.
 
-## API endpoints
+## Cloudflare (`chathouston-methodist.com`)
+
+Use a **subdomain** for FastAPI, e.g. **`https://api.chathouston-methodist.com`**, so the browser (GitHub Pages) calls HTTPS without mixed content.
+
+### Option A — Cloudflare Tunnel (recommended if the API server has no public IP)
+
+1. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) and run `cloudflared tunnel login`.
+2. On this project’s primary machine, **readmit** is exposed as **`https://readmit-api.chathouston-methodist.com`** via the existing **`methodist-chatbot`** tunnel (`~/.cloudflared/config.yml`). **`api.chathouston-methodist.com`** remains on port **5002** for the other app.
+3. Run the connector (if not already running as a service):
+
+   ```bash
+   cloudflared tunnel --config ~/.cloudflared/config.yml run methodist-chatbot
+   ```
+
+4. Set **`VITE_API_BASE_URL=https://readmit-api.chathouston-methodist.com`** in GitHub Actions variables (and in repo `.env` for local builds).
+5. Restart FastAPI after changing **`.env`**.
+
+### Option B — Origin server + proxy
+
+Point **`api.chathouston-methodist.com`** (orange-cloud proxied) at your machine with **SSL Full (strict)** to a reverse proxy that forwards to **`127.0.0.1:8001`**.
+
+### API endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|

@@ -1,0 +1,20 @@
+# Example Cloudflare Tunnel config for exposing FastAPI (UI backend) on port 8001.
+#
+# This machine already uses tunnel "methodist-chatbot" with config at ~/.cloudflared/config.yml.
+# Readmit is routed as: readmit-api.chathouston-methodist.com → http://127.0.0.1:8001
+#
+# For a new tunnel from scratch:
+# 1. cloudflared tunnel login
+# 2. cloudflared tunnel create readmit-api
+# 3. cloudflared tunnel route dns readmit-api readmit-api.your-domain.com
+# 4. cloudflared tunnel run readmit-api
+#
+# Docs: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
+
+tunnel: YOUR_TUNNEL_UUID_HERE
+credentials-file: /ABSOLUTE/PATH/.cloudflared/YOUR_TUNNEL_UUID_HERE.json
+
+ingress:
+  - hostname: readmit-api.your-domain.com
+    service: http://127.0.0.1:8001
+  - service: http_status:404
