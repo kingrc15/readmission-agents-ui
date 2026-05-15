@@ -1,0 +1,29 @@
+# PHI / local data
+data/
+*.parquet
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Env
+.env
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Outputs
+outputs/
