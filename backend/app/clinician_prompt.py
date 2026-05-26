@@ -36,7 +36,13 @@ def build_default_user_prompt_template(
         '- "comorbidities": array of strings (other relevant comorbidities)\n'
         '- "readmission_reasons_ranked": array of strings, length 1–3, most contributory first\n'
         '- "prevention_recommendations": string (what could have been done to prevent readmission; '
-        "medical and nonmedical; be specific)\n\n"
+        "medical and nonmedical; be specific)\n"
+        '- "clinical_note_evidence": array of objects. Each object must identify a clinical-note '
+        "area used in your decision, with keys: "
+        '"source_note" ("index_discharge_summary" or "readmit_discharge_summary"), '
+        '"excerpt" (a short exact quote or tightly faithful snippet from that note), and '
+        '"relevance" (how this excerpt supports the readmission reason or prevention recommendation). '
+        "Include 3–8 high-yield evidence items and avoid long note dumps.\n\n"
         "Patient identifier:\n"
         f"{patient_identifier.strip()}\n\n"
         "Previous (index HF admission) discharge summary:\n"

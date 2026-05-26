@@ -2,7 +2,13 @@ import { useState } from "react";
 import type { ChatResponse } from "../api/types";
 import { PLACEHOLDER_FOLLOWUP, PLACEHOLDER_INDEX } from "../buildDefaultUserPrompt";
 
-type ResultTab = "reasoning" | "json" | "raw";
+type ResultTab = "reasoning" | "evidence" | "json" | "raw";
+
+type EvidenceItem = {
+  source_note: string;
+  excerpt: string;
+  relevance: string;
+};
 
 interface Props {
   systemPrompt: string;
@@ -21,6 +27,30 @@ function needsRowForPlaceholders(userPrompt: string): boolean {
   return userPrompt.includes(PLACEHOLDER_INDEX) || userPrompt.includes(PLACEHOLDER_FOLLOWUP);
 }
 
+function asText(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+function evidenceItems(result: ChatResponse | null): EvidenceItem[] {
+  const raw = result?.analysis?.clinical_note_evidence;
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      if (typeof item === "string") {
+        return { source_note: "", excerpt: item, relevance: "" };
+      }
+      if (item == null || typeof item !== "object") return null;
+      const obj = item as Record<string, unknown>;
+      return {
+        source_note: asText(obj.source_note),
+        excerpt: asText(obj.excerpt),
+        relevance: asText(obj.relevance),
+      };
+    })
+    .filter((item): item is EvidenceItem => item != null && Boolean(item.excerpt || item.relevance));
+}
+
 export function PromptPanel({
   systemPrompt,
   userPrompt,
@@ -35,6 +65,7 @@ export function PromptPanel({
 }: Props) {
   const runBlockedByPlaceholders = needsRowForPlaceholders(userPrompt) && selectedRowId == null;
   const [resultTab, setResultTab] = useState<ResultTab>("reasoning");
+  const evidence = evidenceItems(chatResult);
 
   return (
     <div className="panel">
@@ -95,6 +126,7 @@ export function PromptPanel({
               {(
                 [
                   ["reasoning", "Reasoning"],
+                  ["evidence", "Evidence"],
                   ["json", "JSON"],
                   ["raw", "Raw"],
                 ] as const
@@ -114,6 +146,26 @@ export function PromptPanel({
               <pre className="results-pre">
                 {chatResult.thinking?.trim() || "(No <thinking> block parsed)"}
               </pre>
+            )}
+            {resultTab === "evidence" && (
+              <div className="evidence-list">
+                {evidence.length > 0 ? (
+                  evidence.map((item, idx) => (
+                    <article className="evidence-card" key={`${idx}-${item.excerpt.slice(0, 20)}`}>
+                      <div className="evidence-card-header">
+                        Evidence {idx + 1}
+                        {item.source_note ? <span>{item.source_note}</span> : null}
+                      </div>
+                      {item.excerpt ? <blockquote>{item.excerpt}</blockquote> : null}
+                      {item.relevance ? <p>{item.relevance}</p> : null}
+                    </article>
+                  ))
+                ) : (
+                  <p className="results-empty">
+                    No <code>clinical_note_evidence</code> items parsed in this response.
+                  </p>
+                )}
+              </div>
             )}
             {resultTab === "json" && (
               <pre className="results-pre">
