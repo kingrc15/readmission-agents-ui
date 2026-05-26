@@ -12,6 +12,7 @@ import type {
   AdmissionDetail,
   AdmissionListItem,
   ChatResponse,
+  DatasetKey,
   NoteViewMode,
 } from "./api/types";
 import { AdmissionSelector } from "./components/AdmissionSelector";
@@ -21,6 +22,7 @@ import { PromptPanel } from "./components/PromptPanel";
 import { buildDefaultUserPromptTemplate } from "./buildDefaultUserPrompt";
 
 export default function App() {
+  const [dataset, setDataset] = useState<DatasetKey>("mimic-iii");
   const [listItems, setListItems] = useState<AdmissionListItem[]>([]);
   const [listTotal, setListTotal] = useState(0);
   const [listLoading, setListLoading] = useState(true);
@@ -42,7 +44,7 @@ export default function App() {
     setListLoading(true);
     setListError(null);
     try {
-      const res = await listAllAdmissions();
+      const res = await listAllAdmissions(dataset);
       setListItems(res.items);
       setListTotal(res.total);
     } catch (e) {
@@ -56,7 +58,7 @@ export default function App() {
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [dataset]);
 
   useEffect(() => {
     const bump = () => setConnRev((n) => n + 1);
@@ -85,7 +87,8 @@ export default function App() {
     void (async () => {
       try {
         const base = getApiBaseUrl();
-        const r = await fetch(`${base}/api/admissions?limit=1`, {
+        const q = new URLSearchParams({ dataset, limit: "1" });
+        const r = await fetch(`${base}/api/admissions?${q.toString()}`, {
           headers: {
             "Content-Type": "application/json",
             "ngrok-skip-browser-warning": "true",
@@ -101,7 +104,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [connRev]);
+  }, [connRev, dataset]);
 
   useEffect(() => {
     void loadList();
@@ -110,7 +113,10 @@ export default function App() {
   const loadAdmissionAndPrompts = useCallback(async (rowId: number) => {
     setError(null);
     try {
-      const [detail, prompts] = await Promise.all([getAdmission(rowId), getDefaultPrompt(rowId)]);
+      const [detail, prompts] = await Promise.all([
+        getAdmission(rowId, dataset),
+        getDefaultPrompt(rowId, dataset),
+      ]);
       setAdmission(detail);
       setSystemPrompt(prompts.system_prompt);
       setUserPrompt(buildDefaultUserPromptTemplate(detail.patient_identifier));
@@ -118,11 +124,21 @@ export default function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load admission");
     }
-  }, []);
+  }, [dataset]);
 
   const handleSelect = (rowId: number) => {
     setSelectedRowId(rowId);
     void loadAdmissionAndPrompts(rowId);
+  };
+
+  const handleDatasetChange = (next: DatasetKey) => {
+    setDataset(next);
+    setSelectedRowId(null);
+    setAdmission(null);
+    setSystemPrompt("");
+    setUserPrompt("");
+    setChatResult(null);
+    setError(null);
   };
 
   const handleResetDefault = () => {
@@ -138,6 +154,7 @@ export default function App() {
       const result = await runChat({
         system_prompt: systemPrompt,
         user_prompt: userPrompt,
+        dataset,
         think_first: true,
         row_id: selectedRowId ?? undefined,
       });
@@ -174,6 +191,8 @@ export default function App() {
             <h1>Readmit LLM — Clinician Review</h1>
             <p>
               API: {apiLine || "(same-origin)"}
+              {" "}
+              · Cohort {dataset === "mimic-iv" ? "MIMIC-IV" : "MIMIC-III"}
               {admission && (
                 <>
                   {" "}
@@ -207,6 +226,8 @@ export default function App() {
       </header>
 
       <AdmissionSelector
+        dataset={dataset}
+        onDatasetChange={handleDatasetChange}
         items={listItems}
         total={listTotal}
         selectedRowId={selectedRowId}

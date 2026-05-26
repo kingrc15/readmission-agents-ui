@@ -285,6 +285,12 @@ textarea {
   color: var(--text);
 }
 
+.dataset-dropdown {
+  flex: 0 0 140px !important;
+  min-width: 140px !important;
+  cursor: pointer;
+}
+
 .admission-selector {
   flex-wrap: wrap;
 }

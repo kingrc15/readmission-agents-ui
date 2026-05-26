@@ -35,7 +35,9 @@ If `READMIT_API_TOKEN` is unset, the API stays open (local dev only).
 - Node.js 18+
 - vLLM (or OpenAI-compatible server) on port **8000** (`http://localhost:8000/v1`), or your ngrok URL
 - UI backend (FastAPI) on port **8001** — do not use 8000 if vLLM is already there
-- Cohort parquet at `data/mimicii_hf_index_hf_readmit_30d.parquet` (or set `COHORT_PARQUET_PATH`)
+- Cohort parquets:
+  - **MIMIC-III**: `data/mimicii_hf_index_hf_readmit_30d.parquet` (or set `COHORT_PARQUET_PATH`)
+  - **MIMIC-IV**: `data/hf_30d_manual_review_primary_hf_only.parquet` (or set `MIMIC_IV_COHORT_PARQUET_PATH`)
 
 ## Quick start (local)
 
@@ -53,7 +55,7 @@ pip install -r backend/requirements.txt pandas pyarrow openai httpx pydantic ten
 cp .env.example .env
 ```
 
-Edit `.env` — set `COHORT_PARQUET_PATH` and `VLLM_BASE_URL`.
+Edit `.env` — set `COHORT_PARQUET_PATH`, `MIMIC_IV_COHORT_PARQUET_PATH`, and `VLLM_BASE_URL`.
 
 ```bash
 chmod +x backend/run.sh scripts/start-backend.sh
@@ -82,6 +84,7 @@ npm run dev
 Or from repo root: `./scripts/start-frontend.sh`
 
 Open http://localhost:5173 — in dev, Vite proxies `/api` to the UI backend on port **8001**.
+Use the **Cohort** dropdown to switch between **MIMIC-III** and **MIMIC-IV**; the selected cohort is sent to the backend as `dataset=mimic-iii` or `dataset=mimic-iv`.
 
 Override API URL:
 

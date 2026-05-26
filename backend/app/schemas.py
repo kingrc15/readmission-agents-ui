@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+DatasetKey = Literal["mimic-iii", "mimic-iv"]
+
 
 class AdmissionListItem(BaseModel):
+    dataset: DatasetKey = "mimic-iii"
     row_id: int
     patient_identifier: str
     subject_id: Optional[int] = None
@@ -15,6 +18,7 @@ class AdmissionListItem(BaseModel):
 
 
 class AdmissionListResponse(BaseModel):
+    dataset: DatasetKey = "mimic-iii"
     items: list[AdmissionListItem]
     total: int
     offset: int
@@ -28,6 +32,7 @@ class AdmissionDetail(AdmissionListItem):
 
 
 class DefaultPromptResponse(BaseModel):
+    dataset: DatasetKey = "mimic-iii"
     row_id: int
     system_prompt: str
     user_prompt: str
@@ -40,6 +45,7 @@ class DefaultPromptQuery(BaseModel):
 class ChatRequest(BaseModel):
     system_prompt: str
     user_prompt: str
+    dataset: DatasetKey = "mimic-iii"
     row_id: Optional[int] = None
     model: Optional[str] = None
     temperature: Optional[float] = None

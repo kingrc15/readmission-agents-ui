@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import pandas as pd
 
+from .config import DatasetKey
 from .config import get_settings
 
 LIST_COLUMNS = [
@@ -21,20 +22,27 @@ TEXT_COLUMNS = [
     "readmit_discharge_summary",
 ]
 
+DATASET_LABELS: dict[DatasetKey, str] = {
+    "mimic-iii": "MIMIC-III",
+    "mimic-iv": "MIMIC-IV",
+}
+
 
 @lru_cache
-def load_cohort() -> pd.DataFrame:
-    path = get_settings().resolved_cohort_parquet_path()
+def load_cohort(dataset: DatasetKey = "mimic-iii") -> pd.DataFrame:
+    path = get_settings().resolved_cohort_parquet_path(dataset)
     if not path.is_file():
-        raise FileNotFoundError(f"Cohort parquet not found: {path}")
+        raise FileNotFoundError(f"{DATASET_LABELS[dataset]} cohort parquet not found: {path}")
     df = pd.read_parquet(path)
     if "readmit_admission_note" not in df.columns:
         df["readmit_admission_note"] = ""
+    df["dataset"] = dataset
     return df
 
 
 def _row_to_list_item(row: pd.Series) -> dict[str, Any]:
     return {
+        "dataset": str(row.get("dataset") or ""),
         "row_id": int(row["row_id"]),
         "patient_identifier": str(row["patient_identifier"]),
         "subject_id": int(row["subject_id"]) if pd.notna(row.get("subject_id")) else None,
@@ -46,11 +54,12 @@ def _row_to_list_item(row: pd.Series) -> dict[str, Any]:
 
 def list_admissions(
     *,
+    dataset: DatasetKey = "mimic-iii",
     search: Optional[str] = None,
     offset: int = 0,
     limit: int = 50,
 ) -> tuple[list[dict[str, Any]], int]:
-    df = load_cohort()
+    df = load_cohort(dataset)
     if search:
         q = search.strip().lower()
         mask = (
@@ -64,8 +73,8 @@ def list_admissions(
     return items, total
 
 
-def get_admission(row_id: int) -> Optional[dict[str, Any]]:
-    df = load_cohort()
+def get_admission(row_id: int, *, dataset: DatasetKey = "mimic-iii") -> Optional[dict[str, Any]]:
+    df = load_cohort(dataset)
     matches = df[df["row_id"] == row_id]
     if matches.empty:
         return None

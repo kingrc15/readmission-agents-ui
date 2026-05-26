@@ -25,6 +25,7 @@ from .schemas import (
     AdmissionListResponse,
     ChatRequest,
     ChatResponse,
+    DatasetKey,
     DefaultPromptResponse,
 )
 
@@ -69,23 +70,26 @@ def _startup_banner() -> None:
 @app.get("/health")
 def health() -> dict:
     vllm = check_vllm_health()
-    cohort_ok = False
-    cohort_error = None
+    cohort_status: dict[str, dict[str, object]] = {}
     try:
         from .cohort import load_cohort
 
-        df = load_cohort()
-        cohort_ok = True
-        cohort_rows = len(df)
+        for dataset in ("mimic-iii", "mimic-iv"):
+            try:
+                df = load_cohort(dataset)
+                cohort_status[dataset] = {"loaded": True, "rows": len(df), "error": None}
+            except Exception as e:
+                cohort_status[dataset] = {"loaded": False, "rows": 0, "error": str(e)}
     except Exception as e:
-        cohort_error = str(e)
-        cohort_rows = 0
+        cohort_status = {"mimic-iii": {"loaded": False, "rows": 0, "error": str(e)}}
+    cohort_ok = all(bool(s["loaded"]) for s in cohort_status.values())
     return {
         "status": "ok",
         "health_api_revision": HEALTH_API_REVISION,
         "cohort_loaded": cohort_ok,
-        "cohort_rows": cohort_rows,
-        "cohort_error": cohort_error,
+        "cohort_rows": int(cohort_status.get("mimic-iii", {}).get("rows") or 0),
+        "cohort_error": cohort_status.get("mimic-iii", {}).get("error"),
+        "cohorts": cohort_status,
         # Helps debug mistaken https:// on private IPs vs stale backend code (older /health omits probe_url).
         "vllm_base_url": settings.vllm_base_url,
         "vllm": vllm,
@@ -94,34 +98,52 @@ def health() -> dict:
 
 @app.get("/api/admissions", response_model=AdmissionListResponse)
 def api_list_admissions(
+    dataset: DatasetKey = Query("mimic-iii"),
     search: Optional[str] = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
 ) -> AdmissionListResponse:
-    items, total = list_admissions(search=search, offset=offset, limit=limit)
-    return AdmissionListResponse(items=items, total=total, offset=offset, limit=limit)
+    items, total = list_admissions(dataset=dataset, search=search, offset=offset, limit=limit)
+    return AdmissionListResponse(
+        dataset=dataset,
+        items=items,
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @app.get("/api/admissions/{row_id}", response_model=AdmissionDetail)
-def api_get_admission(row_id: int) -> AdmissionDetail:
-    row = get_admission(row_id)
+def api_get_admission(
+    row_id: int,
+    dataset: DatasetKey = Query("mimic-iii"),
+) -> AdmissionDetail:
+    row = get_admission(row_id, dataset=dataset)
     if row is None:
-        raise HTTPException(status_code=404, detail=f"Admission row_id={row_id} not found")
+        raise HTTPException(status_code=404, detail=f"Admission row_id={row_id} not found in {dataset}")
     return AdmissionDetail(**row)
 
 
 @app.get("/api/prompts/default/{row_id}", response_model=DefaultPromptResponse)
-def api_default_prompt(row_id: int) -> DefaultPromptResponse:
-    row = get_admission(row_id)
+def api_default_prompt(
+    row_id: int,
+    dataset: DatasetKey = Query("mimic-iii"),
+) -> DefaultPromptResponse:
+    row = get_admission(row_id, dataset=dataset)
     if row is None:
-        raise HTTPException(status_code=404, detail=f"Admission row_id={row_id} not found")
+        raise HTTPException(status_code=404, detail=f"Admission row_id={row_id} not found in {dataset}")
 
     system_prompt = HF_ICU_READMIT_SYSTEM + "\n\n" + THINKING_BLOCK_INSTRUCTION
     user_prompt = build_default_user_prompt_template(
         patient_identifier=row["patient_identifier"],
         think_first=True,
     )
-    return DefaultPromptResponse(row_id=row_id, system_prompt=system_prompt, user_prompt=user_prompt)
+    return DefaultPromptResponse(
+        dataset=dataset,
+        row_id=row_id,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -142,9 +164,12 @@ def api_chat(body: ChatRequest) -> ChatResponse:
                 detail="row_id is required when the user prompt contains "
                 "{index discharge summary} or {follow-up discharge summary}",
             )
-        row = get_admission(body.row_id)
+        row = get_admission(body.row_id, dataset=body.dataset)
         if row is None:
-            raise HTTPException(status_code=404, detail=f"Admission row_id={body.row_id} not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Admission row_id={body.row_id} not found in {body.dataset}",
+            )
         user_for_llm = substitute_discharge_placeholders(
             user_for_llm,
             index_discharge_summary=row["index_discharge_summary"],

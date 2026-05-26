@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import type { AdmissionListItem } from "../api/types";
+import type { AdmissionListItem, DatasetKey } from "../api/types";
 
 interface Props {
+  dataset: DatasetKey;
+  onDatasetChange: (dataset: DatasetKey) => void;
   items: AdmissionListItem[];
   total: number;
   selectedRowId: number | null;
@@ -30,6 +32,8 @@ function placeholderText(
 }
 
 export function AdmissionSelector({
+  dataset,
+  onDatasetChange,
   items,
   total,
   selectedRowId,
@@ -55,6 +59,17 @@ export function AdmissionSelector({
 
   return (
     <div className="selector-row admission-selector">
+      <label htmlFor="dataset-select">Cohort</label>
+      <select
+        id="dataset-select"
+        className="dataset-dropdown"
+        value={dataset}
+        onChange={(e) => onDatasetChange(e.target.value as DatasetKey)}
+        aria-label="Choose source cohort"
+      >
+        <option value="mimic-iii">MIMIC-III</option>
+        <option value="mimic-iv">MIMIC-IV</option>
+      </select>
       <label htmlFor="admission-select">Subject ID</label>
       <div className="admission-selector-controls">
         <input

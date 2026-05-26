@@ -3,12 +3,14 @@ from __future__ import annotations
 import ipaddress
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlparse, urlunparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+DatasetKey = Literal["mimic-iii", "mimic-iv"]
 
 
 class Settings(BaseSettings):
@@ -19,6 +21,9 @@ class Settings(BaseSettings):
     )
 
     cohort_parquet_path: Path = _REPO_ROOT / "data" / "mimicii_hf_index_hf_readmit_30d.parquet"
+    mimic_iv_cohort_parquet_path: Path = (
+        _REPO_ROOT / "data" / "hf_30d_manual_review_primary_hf_only.parquet"
+    )
     vllm_base_url: str = "http://127.0.0.1:8000/v1"
     vllm_model: str = "local-model"
     vllm_api_key: str = "EMPTY"
@@ -103,15 +108,20 @@ class Settings(BaseSettings):
             return None
         return "|".join(parts)
 
-    def resolved_cohort_parquet_path(self) -> Path:
+    def resolved_cohort_parquet_path(self, dataset: DatasetKey = "mimic-iii") -> Path:
         """Use configured path, or repo data/ fallback if placeholder path is missing."""
-        p = Path(self.cohort_parquet_path)
-        if p.is_file():
-            return p
-        fallback = _REPO_ROOT / "data" / "mimicii_hf_index_hf_readmit_30d.parquet"
+        if dataset == "mimic-iv":
+            configured = Path(self.mimic_iv_cohort_parquet_path)
+            fallback = _REPO_ROOT / "data" / "hf_30d_manual_review_primary_hf_only.parquet"
+        else:
+            configured = Path(self.cohort_parquet_path)
+            fallback = _REPO_ROOT / "data" / "mimicii_hf_index_hf_readmit_30d.parquet"
+
+        if configured.is_file():
+            return configured
         if fallback.is_file():
             return fallback
-        return p
+        return configured
 
 
 @lru_cache

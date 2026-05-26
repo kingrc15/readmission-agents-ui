@@ -3,6 +3,7 @@ import type {
   AdmissionListResponse,
   ChatRequest,
   ChatResponse,
+  DatasetKey,
   DefaultPromptResponse,
 } from "./types";
 
@@ -175,11 +176,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const PAGE_SIZE = 500;
 
 export function listAdmissions(params: {
+  dataset?: DatasetKey;
   search?: string;
   offset?: number;
   limit?: number;
 }): Promise<AdmissionListResponse> {
   const q = new URLSearchParams();
+  if (params.dataset) q.set("dataset", params.dataset);
   if (params.search) q.set("search", params.search);
   if (params.offset != null) q.set("offset", String(params.offset));
   if (params.limit != null) q.set("limit", String(params.limit));
@@ -187,25 +190,28 @@ export function listAdmissions(params: {
   return request(`/api/admissions${qs ? `?${qs}` : ""}`);
 }
 
-export async function listAllAdmissions(): Promise<AdmissionListResponse> {
-  const first = await listAdmissions({ offset: 0, limit: PAGE_SIZE });
+export async function listAllAdmissions(dataset: DatasetKey = "mimic-iii"): Promise<AdmissionListResponse> {
+  const first = await listAdmissions({ dataset, offset: 0, limit: PAGE_SIZE });
   const all = [...first.items];
   let offset = first.items.length;
   while (offset < first.total) {
-    const page = await listAdmissions({ offset, limit: PAGE_SIZE });
+    const page = await listAdmissions({ dataset, offset, limit: PAGE_SIZE });
     all.push(...page.items);
     offset += page.items.length;
     if (page.items.length === 0) break;
   }
-  return { items: all, total: first.total, offset: 0, limit: all.length };
+  return { dataset, items: all, total: first.total, offset: 0, limit: all.length };
 }
 
-export function getAdmission(rowId: number): Promise<AdmissionDetail> {
-  return request(`/api/admissions/${rowId}`);
+export function getAdmission(rowId: number, dataset: DatasetKey = "mimic-iii"): Promise<AdmissionDetail> {
+  return request(`/api/admissions/${rowId}?dataset=${encodeURIComponent(dataset)}`);
 }
 
-export function getDefaultPrompt(rowId: number): Promise<DefaultPromptResponse> {
-  return request(`/api/prompts/default/${rowId}`);
+export function getDefaultPrompt(
+  rowId: number,
+  dataset: DatasetKey = "mimic-iii",
+): Promise<DefaultPromptResponse> {
+  return request(`/api/prompts/default/${rowId}?dataset=${encodeURIComponent(dataset)}`);
 }
 
 export function runChat(body: ChatRequest): Promise<ChatResponse> {
